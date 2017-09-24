@@ -90,3 +90,84 @@ contributions %>%
   ggplot(aes(word, contribution, fill = contribution > 0)) +
   geom_col(show.legend = FALSE) +
   coord_flip()
+
+##Tokenizing by n-gram
+library(dplyr)
+library(tidytext)
+library(janeaustenr)
+
+text_df %>% 
+  unnest_tokens(word, text, token = "ngrams", n = 2)
+
+text_df %>%
+  unnest_tokens(word, text, token = "ngrams", n = 2)%>%
+  count(word, sort = TRUE)
+
+library(tidyr)
+text_separated <- text_df %>%
+  unnest_tokens(word, text, token = "ngrams", n = 2)%>%
+  separate(word, c("word1", "word2"), sep = " ")
+
+text_filtered <- text_separated %>%
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word)
+
+# new bigram counts:
+text_counts <- text_filtered %>% 
+  count(word1, word2, sort = TRUE)
+
+text_counts
+
+##
+text_united <- text_filtered %>%
+  unite(tt, word1, word2, sep = " ")
+
+text_united
+
+##高频词
+library(stringr)
+wordf <- text_df %>%
+  mutate(line = 1:nrow(text_df)) %>%
+  filter(nchar(text) > 0) %>%
+  unnest_tokens(word, text) %>%
+  anti_join(stop_words) %>%
+  filter(str_detect(word, "[^\\d]")) 
+
+library(igraph)
+library(ggraph)
+
+abs_word_pairs <- wordf %>%
+  pairwise_count(word,line,sort = TRUE)
+
+set.seed(42)
+abs_word_pairs %>%
+  filter(n >= 9) %>%
+  graph_from_data_frame() %>%
+  ggraph(layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n, edge_width = n), edge_colour = "cyan4") +
+  geom_node_point(size = 1) +
+  geom_node_text(aes(label = name), repel = TRUE, 
+                 point.padding = unit(0.2, "lines")) +
+  labs(title = "Bigrams in abstract") +
+  theme_void()
+
+##
+
+words_by_journal <- wordf %>%
+  count(line, word, sort = TRUE) %>%
+  ungroup()
+
+tf_idf <- words_by_journal %>%
+  bind_tf_idf(line, word, n) %>%
+  arrange(desc(tf_idf))
+
+tf_idf %>%
+  group_by(line) %>%
+  top_n(10, tf_idf) %>%
+  ungroup() %>%
+  mutate(word = reorder(word, tf_idf)) %>%
+  ggplot(aes(word, tf_idf, fill = line)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ line, scales = "free") +
+  ylab("tf-idf") +
+  coord_flip()
